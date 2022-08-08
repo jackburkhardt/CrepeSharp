@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.7.0" />
+      <PackageReference Include="TensorFlow.Keras" Version="0.7.0" />
+      <PackageReference Include="TensorFlow.NET" Version="0.70.1" />
+    </ItemGroup>
+
+</Project>
