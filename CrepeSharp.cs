@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using Tensorflow;
 using Tensorflow.Keras.Engine;
 using Tensorflow.Keras.Optimizers;
+using Tensorflow.NumPy;
 using static Tensorflow.KerasApi;
 using static Tensorflow.Binding;
+using NDArray = Tensorflow.NumPy.NDArray;
 
 namespace CrepeSharp
 {
@@ -96,10 +99,36 @@ namespace CrepeSharp
         /// <param name="suffix"></param>
         /// <param name="output_dir"></param>
         /// <returns>The output path of an output file corresponding to a wav file</returns>
-        public static string OutputPath(object file, string suffix, string output_dir)
+        public static string OutputPath(string file, string suffix, string output_dir)
         {
+            var path = Regex.Replace(file, @"(?i).wav$", suffix);
+            if (output_dir != "")
+            {
+                path = Path.Join(output_dir, new DirectoryInfo(path).Name); // idk how i feel about this
+            }
+
+            return path;
         }
-        
-        public static 
+
+        public static NDArray GetActivation(
+            NDArray audio, int sr = MODEL_SRATE, ModelCapacity model_capacity = ModelCapacity.Full, 
+            bool center = true, int step_size = 10,  int verbose = 1) // i know this is quite long
+        {
+            var model = BuildAndLoadModel(model_capacity);
+
+            if (len(audio.shape) == 2) audio = np.mean(1); // hmm
+            audio = audio.astype(np.float32);
+            //if (sr != MODEL_SRATE) resample
+            if (center)
+            {
+                tf.pad(audio, new Tensor(512), mode: "constant", constant_values: 0); // todo: check paddings
+            }
+
+            var hop_length = Convert.ToInt32(MODEL_SRATE * step_size / 1000);
+            var n_frames = 1 + Convert.ToInt32(len(audio) / hop_length);
+            //var frames = tf.strided_slice(audio, new Tensor(shape: (shape)(1024, n_frames)), (tf.size(audio), hop_length * tf.size(audio)));
+            
+            //tf.strided_slice()
+        }
     }
 }
