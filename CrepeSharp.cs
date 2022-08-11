@@ -2,13 +2,13 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
+using CSCore.Codecs.WAV;
 using Tensorflow;
 using Tensorflow.Keras.Engine;
 using Tensorflow.Keras.Optimizers;
-using Tensorflow.NumPy;
 using static Tensorflow.KerasApi;
 using static Tensorflow.Binding;
-using NDArray = Tensorflow.NumPy.NDArray;
+using NumpyDotNet;
 
 namespace CrepeSharp
 {
@@ -110,25 +110,53 @@ namespace CrepeSharp
             return path;
         }
 
-        public static NDArray GetActivation(
-            NDArray audio, int sr = MODEL_SRATE, ModelCapacity model_capacity = ModelCapacity.Full, 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="audio">The audio samples. Multichannel audio will be downmixed.</param>
+        /// <param name="sr">Sample rate of the audio samples. The audio will be resampled if
+        /// the sample rate is not 16 kHz, which is expected by the model.</param>
+        /// <param name="model_capacity">Model capacity</param>
+        /// <param name="center">If `True` (default), the signal `audio` is padded so that frame
+        /// `D[:, t]` is centered at `audio[t * hop_length]` If `False`,
+        /// then `D[:, t]` begins at `audio[t * hop_length]`</param>
+        /// <param name="step_size">The step size in milliseconds for running pitch estimation.</param>
+        /// <param name="verbose">Set the keras verbosity mode: 1 (default) will print out a progress bar
+        /// during prediction, 0 will suppress all non-error printouts.</param>
+        /// <returns>The raw activation matrix</returns>
+        public static Tensor GetActivation(
+            ndarray audio, int sr = MODEL_SRATE, ModelCapacity model_capacity = ModelCapacity.Full, 
             bool center = true, int step_size = 10,  int verbose = 1) // i know this is quite long
         {
             var model = BuildAndLoadModel(model_capacity);
 
             if (len(audio.shape) == 2) audio = np.mean(1); // hmm
-            audio = audio.astype(np.float32);
+            audio = audio.astype(np.Float32);
             //if (sr != MODEL_SRATE) resample
             if (center)
             {
-                tf.pad(audio, new Tensor(512), mode: "constant", constant_values: 0); // todo: check paddings
+                // todo: check paddings
             }
 
             var hop_length = Convert.ToInt32(MODEL_SRATE * step_size / 1000);
             var n_frames = 1 + Convert.ToInt32(len(audio) / hop_length);
-            //var frames = tf.strided_slice(audio, new Tensor(shape: (shape)(1024, n_frames)), (tf.size(audio), hop_length * tf.size(audio)));
+            var frames = np.as_strided(x: audio, shape: (1024, n_frames).GetShape(),
+                strides: (audio.ItemSize, hop_length * audio.ItemSize).GetShape()); // todo:: check this
+            frames = frames.Transpose().Copy();
             
-            //tf.strided_slice()
+            frames -= np.mean(frames, axis: 1)[':', np.newaxis];
+            frames /= np.clip(a: np.std(frames, axis: 1)[':', np.newaxis], a_min: 1e-8, a_max: null);
+
+            return model.predict(tf.convert_to_tensor(frames, TF_DataType.TF_FLOAT), verbose: verbose);
+        }
+
+        public static void ProcessFile(string file, string output = null,
+            ModelCapacity model_capacity = ModelCapacity.Full,
+            bool viterbi = false, bool center = true, bool save_activation = false, bool save_plot = false,
+            bool plot_voicing = false, int step_size = 10, bool verbose = true)
+        {
+            var reader = new WaveFileReader(file);
+            
         }
     }
 }
