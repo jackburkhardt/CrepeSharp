@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using CSCore.Codecs.WAV;
 using Tensorflow;
@@ -124,7 +125,7 @@ namespace CrepeSharp
         /// <param name="verbose">Set the keras verbosity mode: 1 (default) will print out a progress bar
         /// during prediction, 0 will suppress all non-error printouts.</param>
         /// <returns>The raw activation matrix</returns>
-        public static Tensor GetActivation(
+        public static ndarray GetActivation(
             ndarray audio, int sr = MODEL_SRATE, ModelCapacity model_capacity = ModelCapacity.Full, 
             bool center = true, int step_size = 10,  int verbose = 1) // i know this is quite long
         {
@@ -149,6 +150,25 @@ namespace CrepeSharp
 
             return model.predict(tf.convert_to_tensor(frames, TF_DataType.TF_FLOAT), verbose: verbose);
         }
+
+        public static (ndarray, ndarray, ndarray, ndarray) Predict(ndarray audio, int sr = MODEL_SRATE,
+            ModelCapacity model_capacity = ModelCapacity.Full,
+            bool viterbi = false, bool center = true, int step_size = 10, int verbose = 1)
+        {
+            var activation = GetActivation(audio, sr, model_capacity, center, step_size, verbose);
+            var confidence = np.max(activation, axis: 1);
+
+            ndarray cents;
+
+            ndarray frequency = 10 * 2 ** (cents / 1200);
+            frequency[np.isnan(frequency)] = 0;
+
+            var time = np.arange(confidence.shape[0]) * step_size / 1000.0;
+
+            return (time, frequency, confidence, activation);
+        }
+        
+        public static 
 
         public static void ProcessFile(string file, string output = null,
             ModelCapacity model_capacity = ModelCapacity.Full,
