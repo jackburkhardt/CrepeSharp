@@ -4,12 +4,13 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using CSCore.Codecs.WAV;
+using Numpy;
 using Tensorflow;
 using Tensorflow.Keras.Engine;
 using Tensorflow.Keras.Optimizers;
 using static Tensorflow.KerasApi;
 using static Tensorflow.Binding;
-using NumpyDotNet;
+using NDArray = Numpy.NDarray;
 
 namespace CrepeSharp
 {
@@ -125,43 +126,42 @@ namespace CrepeSharp
         /// <param name="verbose">Set the keras verbosity mode: 1 (default) will print out a progress bar
         /// during prediction, 0 will suppress all non-error printouts.</param>
         /// <returns>The raw activation matrix</returns>
-        public static ndarray GetActivation(
-            ndarray audio, int sr = MODEL_SRATE, ModelCapacity model_capacity = ModelCapacity.Full, 
+        public static NDArray GetActivation(
+            NDArray audio, int sr = MODEL_SRATE, ModelCapacity model_capacity = ModelCapacity.Full, 
             bool center = true, int step_size = 10,  int verbose = 1) // i know this is quite long
         {
             var model = BuildAndLoadModel(model_capacity);
 
-            if (len(audio.shape) == 2) audio = np.mean(1); // hmm
-            audio = audio.astype(np.Float32);
+            if (len(audio.shape) == 2) audio = (NDArray)np.mean(a: (NDArray)1); // hmm
+            audio = audio.astype(np.float32);
             //if (sr != MODEL_SRATE) resample
             if (center)
             {
-                // todo: check paddings
+                audio = np.pad(audio, (NDArray)512, "constant", constant_values: 0.GetShape());
             }
 
             var hop_length = Convert.ToInt32(MODEL_SRATE * step_size / 1000);
             var n_frames = 1 + Convert.ToInt32(len(audio) / hop_length);
-            var frames = np.as_strided(x: audio, shape: (1024, n_frames).GetShape(),
-                strides: (audio.ItemSize, hop_length * audio.ItemSize).GetShape()); // todo:: check this
-            frames = frames.Transpose().Copy();
+            var frames = np.lib.stride_tricks.as_strided(audio, shape: (1024, n_frames), strides: (audio.itemsize, hop_length * audio.itemsize).GetShape());
+            frames = frames.transpose().copy();
             
             frames -= np.mean(frames, axis: 1)[':', np.newaxis];
-            frames /= np.clip(a: np.std(frames, axis: 1)[':', np.newaxis], a_min: 1e-8, a_max: null);
+            frames /= np.clip(a: np.std(frames, axis: 1)[':', np.newaxis], a_min: (NDArray)1e-8, a_max: null);
 
-            return model.predict(tf.convert_to_tensor(frames, TF_DataType.TF_FLOAT), verbose: verbose);
+            return (model.predict(tf.convert_to_tensor(frames, TF_DataType.TF_FLOAT), verbose: verbose));
         }
 
-        public static (ndarray, ndarray, ndarray, ndarray) Predict(ndarray audio, int sr = MODEL_SRATE,
+        public static (NDArray, NDArray, NDArray, NDArray) Predict(NDarray audio, int sr = MODEL_SRATE,
             ModelCapacity model_capacity = ModelCapacity.Full,
             bool viterbi = false, bool center = true, int step_size = 10, int verbose = 1)
         {
             var activation = GetActivation(audio, sr, model_capacity, center, step_size, verbose);
-            var confidence = np.max(activation, axis: 1);
+            var confidence = np.max(activation, axis: 1.GetShape());
 
-            ndarray cents;
+            NDarray cents;
 
-            ndarray frequency = 10 * 2 ** (cents / 1200);
-            frequency[np.isnan(frequency)] = 0;
+            NDarray frequency = 10 * 2 ** (cents / 1200);
+            frequency[] = 0;
 
             var time = np.arange(confidence.shape[0]) * step_size / 1000.0;
 
